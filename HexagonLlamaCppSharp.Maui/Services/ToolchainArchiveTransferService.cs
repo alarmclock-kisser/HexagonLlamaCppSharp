@@ -229,6 +229,11 @@ public sealed class ToolchainArchiveTransferService : IToolchainArchiveTransferS
 
     private static string? FindDownloadArchive(string fileName)
     {
+        if (!global::Android.OS.Environment.IsExternalStorageManager)
+        {
+            return null;
+        }
+
         var externalRoot = global::Android.OS.Environment.ExternalStorageDirectory?.AbsolutePath;
         if (string.IsNullOrWhiteSpace(externalRoot))
         {
@@ -256,7 +261,7 @@ public sealed class ToolchainArchiveTransferService : IToolchainArchiveTransferS
         var resolver = context.ContentResolver
             ?? throw new IOException("Android konnte den Downloads-Speicheranbieter nicht öffnen.");
         var values = new ContentValues();
-        values.Put("display_name", archive.ArchiveFileName);
+        values.Put("_display_name", archive.ArchiveFileName);
         values.Put("mime_type", ArchiveMimeType);
         values.Put("relative_path", DownloadRelativePath);
         values.Put("is_pending", 1);
@@ -267,18 +272,20 @@ public sealed class ToolchainArchiveTransferService : IToolchainArchiveTransferS
         try
         {
             await using var input = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-            await using var output = resolver.OpenOutputStream(uri)
-                ?? throw new IOException($"Android konnte '{archive.ArchiveFileName}' nicht beschreiben.");
-            await CopyStreamWithProgressAsync(
-                input,
-                output,
-                archive,
-                archiveIndex,
-                archiveCount,
-                "Sichere nach Downloads",
-                progress,
-                cancellationToken);
-            await output.FlushAsync(cancellationToken);
+            await using (var output = resolver.OpenOutputStream(uri)
+                ?? throw new IOException($"Android konnte '{archive.ArchiveFileName}' nicht beschreiben."))
+            {
+                await CopyStreamWithProgressAsync(
+                    input,
+                    output,
+                    archive,
+                    archiveIndex,
+                    archiveCount,
+                    "Sichere nach Downloads",
+                    progress,
+                    cancellationToken);
+                await output.FlushAsync(cancellationToken);
+            }
 
             var completedValues = new ContentValues();
             completedValues.Put("is_pending", 0);

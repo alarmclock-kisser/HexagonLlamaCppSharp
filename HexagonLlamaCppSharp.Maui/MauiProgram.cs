@@ -28,6 +28,7 @@ namespace HexagonLlamaCppSharp.Maui
             builder.Services.AddSingleton<IExecutionProbe, AndroidExecutionProbe>();
             builder.Services.AddSingleton<IToolchainManifestProvider, PackageToolchainManifestProvider>();
             builder.Services.AddSingleton<IInstallationDialogService, MauiInstallationDialogService>();
+            builder.Services.AddSingleton<ISharedStorageAccessService, AndroidSharedStorageAccessService>();
             builder.Services.AddSingleton<ILogExportService, AndroidLogExportService>();
             builder.Services.AddSingleton<IToolchainArchiveTransferService, ToolchainArchiveTransferService>();
             builder.Services.AddSingleton<IInAppToolchainBootstrapper, InAppToolchainBootstrapper>();

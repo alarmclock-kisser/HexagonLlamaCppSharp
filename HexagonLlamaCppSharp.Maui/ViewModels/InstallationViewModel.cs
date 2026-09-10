@@ -17,6 +17,7 @@ public sealed class InstallationViewModel : INotifyPropertyChanged
     private readonly IToolchainManifestProvider _manifestProvider;
     private readonly IToolchainArchiveTransferService _archiveTransferService;
     private readonly IInstallationDialogService _dialogService;
+    private readonly ISharedStorageAccessService _sharedStorageAccessService;
     private readonly ILogExportService _logExportService;
     private readonly IInAppToolchainBootstrapper _inAppToolchainBootstrapper;
     private readonly ILlamaBuildInstaller _llamaBuildInstaller;
@@ -39,6 +40,7 @@ public sealed class InstallationViewModel : INotifyPropertyChanged
         IToolchainManifestProvider manifestProvider,
         IToolchainArchiveTransferService archiveTransferService,
         IInstallationDialogService dialogService,
+        ISharedStorageAccessService sharedStorageAccessService,
         ILogExportService logExportService,
         IInAppToolchainBootstrapper inAppToolchainBootstrapper,
         ILlamaBuildInstaller llamaBuildInstaller,
@@ -50,6 +52,7 @@ public sealed class InstallationViewModel : INotifyPropertyChanged
         _manifestProvider = manifestProvider;
         _archiveTransferService = archiveTransferService;
         _dialogService = dialogService;
+        _sharedStorageAccessService = sharedStorageAccessService;
         _logExportService = logExportService;
         _inAppToolchainBootstrapper = inAppToolchainBootstrapper;
         _llamaBuildInstaller = llamaBuildInstaller;
@@ -238,7 +241,7 @@ public sealed class InstallationViewModel : INotifyPropertyChanged
         }
         catch (UnauthorizedAccessException exception)
         {
-            await TryHandlePrimaryFailureAsync($"Zugriff auf den privaten App-Speicher wurde verweigert: {exception.Message}", _installationCancellation.Token);
+            await TryHandlePrimaryFailureAsync($"Dateizugriff wurde verweigert: {exception.Message}", _installationCancellation.Token);
         }
         catch (PlatformNotSupportedException exception)
         {
@@ -321,7 +324,7 @@ public sealed class InstallationViewModel : INotifyPropertyChanged
         }
         catch (UnauthorizedAccessException exception)
         {
-            Status = "Der Zugriff auf Documents wurde verweigert.";
+            Status = "Der Zugriff auf Downloads wurde verweigert.";
             AppendLog(new ProcessLogLine(exception.Message, true));
         }
         catch (Exception exception) when (exception is Java.Lang.Exception or ArgumentException or InvalidOperationException or NotSupportedException)
@@ -418,6 +421,11 @@ public sealed class InstallationViewModel : INotifyPropertyChanged
             return;
         }
 
+        if (!await RequestDownloadAccessAsync(cancellationToken))
+        {
+            return;
+        }
+
         if (!await _archiveTransferService.HasAnyDownloadArchivesAsync(manifest, cancellationToken))
         {
             output.Report(new ProcessLogLine("Keine verifizierten Toolchain-Archive in Downloads gefunden; Online-Download bleibt aktiviert.", false));
@@ -455,6 +463,26 @@ public sealed class InstallationViewModel : INotifyPropertyChanged
         catch (Exception exception) when (exception is CryptographicException or IOException or UnauthorizedAccessException)
         {
             output.Report(new ProcessLogLine($"Lokale Toolchain-Archive konnten nicht verwendet werden: {exception.Message}", true));
+        }
+    }
+
+    private async Task<bool> RequestDownloadAccessAsync(CancellationToken cancellationToken)
+    {
+        Status = "Speicherfreigabe prüfen: In Android gegebenenfalls Zugriff auf alle Dateien erlauben und zur App zurückkehren.";
+        try
+        {
+            var granted = await _sharedStorageAccessService.RequestAccessAsync(cancellationToken);
+            AppendLog(new ProcessLogLine(
+                granted
+                    ? "Zugriff auf Downloads ist freigegeben."
+                    : "Warnung: Speicherfreigabe nicht erteilt; die automatische Downloads-Prüfung wird übersprungen. Online-Download bleibt aktiviert.",
+                !granted));
+            return granted;
+        }
+        catch (Exception exception) when (exception is Java.Lang.Exception or InvalidOperationException)
+        {
+            AppendLog(new ProcessLogLine($"Speicherfreigabe konnte nicht geöffnet werden: {exception.Message}. Online-Download bleibt aktiviert.", true));
+            return false;
         }
     }
 
