@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="HexagonLlamaCppSharp.Maui.ServerDashboardPage"
+             Title="llama-server">
+    <ScrollView>
+        <VerticalStackLayout Padding="16"
+                             Spacing="12">
+            <Label Text="llama-server Dashboard"
+                   Style="{StaticResource Headline}"
+                   SemanticProperties.HeadingLevel="Level1" />
+            <Label Text="GGUF-Dateien werden ausschließlich am ausgewählten Originalpfad verwendet."
+                   Style="{StaticResource SubHeadline}" />
+
+            <Border Padding="12"
+                    Stroke="{StaticResource Gray400}"
+                    StrokeThickness="1"
+                    StrokeShape="RoundRectangle 6">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Modell"
+                           FontAttributes="Bold" />
+                    <Label Text="{Binding SelectedModelName}"
+                           LineBreakMode="TailTruncation" />
+                    <Label Text="{Binding SelectedModelSize}" />
+                    <Label Text="{Binding SelectedModelPath}"
+                           FontSize="11"
+                           LineBreakMode="MiddleTruncation" />
+                    <Button Text="GGUF-Modell auswählen"
+                            Command="{Binding PickModelCommand}" />
+                    <Grid ColumnDefinitions="*,Auto"
+                          ColumnSpacing="8">
+                        <Entry Text="{Binding MmprojPath}"
+                               Placeholder="Optionaler mmproj-Pfad"
+                               ClearButtonVisibility="WhileEditing"
+                               HorizontalOptions="Fill" />
+                        <Button Grid.Column="1"
+                                Text="mmproj"
+                                Command="{Binding PickMmprojCommand}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto"
+                          ColumnSpacing="8">
+                        <Entry Text="{Binding MtpPath}"
+                               Placeholder="Optionaler MTP-Pfad"
+                               ClearButtonVisibility="WhileEditing"
+                               HorizontalOptions="Fill" />
+                        <Button Grid.Column="1"
+                                Text="MTP"
+                                Command="{Binding PickMtpCommand}" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
+
+            <Label Text="Serverparameter"
+                   FontAttributes="Bold" />
+            <Grid ColumnDefinitions="*,*"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                  ColumnSpacing="12"
+                  RowSpacing="8">
+                <Entry Grid.Row="0"
+                       Placeholder="Port (leer = dynamisch)"
+                       Text="{Binding PortText}"
+                       Keyboard="Numeric" />
+                <Entry Grid.Row="0"
+                       Grid.Column="1"
+                       Placeholder="Context Window"
+                       Text="{Binding ContextSizeText}"
+                       Keyboard="Numeric" />
+                <Entry Grid.Row="1"
+                       Placeholder="Hexagon/GPU-Layer"
+                       Text="{Binding GpuLayersText}"
+                       Keyboard="Numeric" />
+                <Entry Grid.Row="1"
+                       Grid.Column="1"
+                       Placeholder="Threads"
+                       Text="{Binding ThreadsText}"
+                       Keyboard="Numeric" />
+                <Entry Grid.Row="2"
+                       Placeholder="Temperatur"
+                       Text="{Binding TemperatureText}"
+                       Keyboard="Numeric" />
+                <Entry Grid.Row="2"
+                       Grid.Column="1"
+                       Placeholder="Top-P"
+                       Text="{Binding TopPText}"
+                       Keyboard="Numeric" />
+                <Entry Grid.Row="3"
+                       Placeholder="Top-K"
+                       Text="{Binding TopKText}"
+                       Keyboard="Numeric" />
+                <Entry Grid.Row="3"
+                       Grid.Column="1"
+                       Placeholder="Repeat Penalty"
+                       Text="{Binding RepeatPenaltyText}"
+                       Keyboard="Numeric" />
+                <Entry Grid.Row="4"
+                       Placeholder="Parallel"
+                       Text="{Binding ParallelText}"
+                       Keyboard="Numeric" />
+                <Entry Grid.Row="4"
+                       Grid.Column="1"
+                       Placeholder="Spec Draft N-Max"
+                       Text="{Binding SpecDraftNMaxText}"
+                       Keyboard="Numeric" />
+                <Entry Grid.Row="5"
+                       Placeholder="Cache-Typ K"
+                       Text="{Binding CacheTypeK}" />
+                <Entry Grid.Row="5"
+                       Grid.Column="1"
+                       Placeholder="Cache-Typ V"
+                       Text="{Binding CacheTypeV}" />
+                <Entry Grid.Row="6"
+                       Grid.ColumnSpan="2"
+                       Placeholder="Spec-Type, z. B. draft-mtp"
+                       Text="{Binding SpecType}" />
+            </Grid>
+
+            <Grid ColumnDefinitions="*,*"
+                  ColumnSpacing="8">
+                <Button Text="Server starten"
+                        Command="{Binding StartServerCommand}" />
+                <Button Grid.Column="1"
+                        Text="Server stoppen"
+                        Command="{Binding StopServerCommand}" />
+            </Grid>
+            <Label Text="{Binding Status}"
+                   LineBreakMode="WordWrap" />
+            <Grid ColumnDefinitions="*,Auto"
+                  ColumnSpacing="8">
+                <Label Text="{Binding Health}"
+                       LineBreakMode="WordWrap" />
+                <Button Grid.Column="1"
+                        Text="Health prüfen"
+                        Command="{Binding RefreshHealthCommand}" />
+            </Grid>
+            <Label Text="{Binding ServerAddress}"
+                   FontSize="12" />
+
+            <Label Text="Server-Konsole"
+                   FontAttributes="Bold" />
+            <Border Padding="8"
+                    Stroke="{StaticResource Gray400}"
+                    StrokeThickness="1"
+                    StrokeShape="RoundRectangle 6">
+                <CollectionView ItemsSource="{Binding LogLines}"
+                                HeightRequest="280"
+                                SelectionMode="None">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate>
+                            <Label Text="{Binding}"
+                                   FontFamily="monospace"
+                                   FontSize="12"
+                                   LineBreakMode="NoWrap" />
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </Border>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

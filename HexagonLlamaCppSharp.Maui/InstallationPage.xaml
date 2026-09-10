@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="HexagonLlamaCppSharp.Maui.InstallationPage"
+             Title="Hexagon-Installation">
+    <Grid Padding="16"
+          RowDefinitions="Auto,Auto,Auto,*,Auto,Auto"
+          RowSpacing="12">
+        <VerticalStackLayout Spacing="4">
+            <Label Text="llama.cpp / Qualcomm Hexagon"
+                   Style="{StaticResource Headline}"
+                   SemanticProperties.HeadingLevel="Level1" />
+             <Label Text="Erster Schritt: Android-Shell und privaten App-Speicher prüfen"
+                   Style="{StaticResource SubHeadline}" />
+        </VerticalStackLayout>
+
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+            <ActivityIndicator IsVisible="{Binding IsBusy}"
+                               IsRunning="{Binding IsBusy}"
+                               WidthRequest="24"
+                               HeightRequest="24"
+                               VerticalOptions="Center" />
+            <ProgressBar Grid.Column="1"
+                         Progress="{Binding ProgressFraction}"
+                         VerticalOptions="Center" />
+            <Label Grid.Column="2"
+                   Text="{Binding ProgressText}"
+                   VerticalOptions="Center"
+                   MinimumWidthRequest="48"
+                   HorizontalTextAlignment="End" />
+        </Grid>
+
+        <Label Grid.Row="2"
+               Text="{Binding Status}"
+               LineBreakMode="WordWrap" />
+
+        <Border Grid.Row="3"
+                Padding="8"
+                Stroke="{StaticResource Gray400}"
+                StrokeThickness="1"
+                StrokeShape="RoundRectangle 6">
+            <ScrollView Orientation="Both"
+                        HorizontalScrollBarVisibility="Always"
+                        VerticalScrollBarVisibility="Always">
+                <Label Text="{Binding TerminalText}"
+                       FontFamily="monospace"
+                       FontSize="12"
+                       HorizontalOptions="Start"
+                       VerticalOptions="Start"
+                       LineBreakMode="NoWrap" />
+            </ScrollView>
+        </Border>
+
+        <Grid Grid.Row="4" ColumnDefinitions="*,*,*" ColumnSpacing="8">
+            <Button Text="Preflight starten"
+                    Command="{Binding RunPreflightCommand}"
+                    IsEnabled="{Binding CanStart}" />
+            <Button Grid.Column="1"
+                    Text="Abbrechen"
+                    Command="{Binding CancelCommand}"
+                    IsEnabled="{Binding IsBusy}" />
+            <Button Grid.Column="2"
+                    Text="Log speichern"
+                    Command="{Binding SaveLogCommand}"
+                    IsEnabled="{Binding CanSaveLog}" />
+        </Grid>
+
+        <VerticalStackLayout Grid.Row="5"
+                             IsVisible="{Binding ShowTermuxActions}"
+                             Spacing="8">
+            <Label Text="Termux-Fallback"
+                   FontAttributes="Bold" />
+            <Button Text="Termux-Fallback erneut starten"
+                    Command="{Binding RunTermuxFallbackCommand}"
+                    IsEnabled="{Binding CanStart}" />
+            <HorizontalStackLayout IsVisible="{Binding ShowTermuxInstallOptions}"
+                                   Spacing="8">
+                <Button Text="Play Store"
+                        Command="{Binding OpenTermuxPlayStoreCommand}"
+                        HorizontalOptions="FillAndExpand" />
+                <Button Text="F-Droid"
+                        Command="{Binding OpenTermuxFdroidCommand}"
+                        HorizontalOptions="FillAndExpand" />
+            </HorizontalStackLayout>
+        </VerticalStackLayout>
+    </Grid>
+</ContentPage>

@@ -1,0 +1,18 @@
+{
+  "version": "android-ndk-r29-and-sdk-aarch64-v2",
+  "archives": [
+    {
+      "name": "android-ndk-r29",
+      "archiveUrl": "https://github.com/lzhiyong/termux-ndk/releases/download/android-ndk/android-ndk-r29-aarch64.tar.xz",
+      "sha256": "02e10e4ddfe8deaeb0bd0cf29d04c981ed5bc8a5d6b560ebb9e7661f472d684b",
+      "archiveFileName": "android-ndk-r29-aarch64.tar.xz"
+    },
+    {
+      "name": "android-sdk-aarch64",
+      "archiveUrl": "https://github.com/lzhiyong/termux-ndk/releases/download/android-sdk/android-sdk-aarch64.tar.xz",
+      "sha256": "8a23d2a10897ad74e34e10d7d2647ed450fad194d622b8b46e1ebd44557171ad",
+      "archiveFileName": "android-sdk-aarch64.tar.xz"
+    }
+  ],
+  "cmakeToolchainFile": "android-ndk-r29/build/cmake/android.toolchain.cmake"
+}
