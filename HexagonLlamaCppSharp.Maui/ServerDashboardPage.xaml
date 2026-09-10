@@ -53,65 +53,79 @@
             <Label Text="Serverparameter"
                    FontAttributes="Bold" />
             <Grid ColumnDefinitions="*,*"
-                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                   RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                   ColumnSpacing="12"
                   RowSpacing="8">
                 <Entry Grid.Row="0"
                        Placeholder="Port (leer = dynamisch)"
-                       Text="{Binding PortText}"
+                       Text="{Binding PortText, Mode=TwoWay}"
                        Keyboard="Numeric" />
                 <Entry Grid.Row="0"
                        Grid.Column="1"
                        Placeholder="Context Window"
-                       Text="{Binding ContextSizeText}"
+                        Text="{Binding ContextSizeText, Mode=TwoWay}"
                        Keyboard="Numeric" />
                 <Entry Grid.Row="1"
                        Placeholder="Hexagon/GPU-Layer"
-                       Text="{Binding GpuLayersText}"
+                       Text="{Binding GpuLayersText, Mode=TwoWay}"
                        Keyboard="Numeric" />
                 <Entry Grid.Row="1"
                        Grid.Column="1"
                        Placeholder="Threads"
-                       Text="{Binding ThreadsText}"
+                        Text="{Binding ThreadsText, Mode=TwoWay}"
                        Keyboard="Numeric" />
                 <Entry Grid.Row="2"
                        Placeholder="Temperatur"
-                       Text="{Binding TemperatureText}"
+                       Text="{Binding TemperatureText, Mode=TwoWay}"
                        Keyboard="Numeric" />
                 <Entry Grid.Row="2"
                        Grid.Column="1"
                        Placeholder="Top-P"
-                       Text="{Binding TopPText}"
+                        Text="{Binding TopPText, Mode=TwoWay}"
                        Keyboard="Numeric" />
                 <Entry Grid.Row="3"
                        Placeholder="Top-K"
-                       Text="{Binding TopKText}"
+                       Text="{Binding TopKText, Mode=TwoWay}"
                        Keyboard="Numeric" />
                 <Entry Grid.Row="3"
                        Grid.Column="1"
                        Placeholder="Repeat Penalty"
-                       Text="{Binding RepeatPenaltyText}"
+                        Text="{Binding RepeatPenaltyText, Mode=TwoWay}"
                        Keyboard="Numeric" />
                 <Entry Grid.Row="4"
                        Placeholder="Parallel"
-                       Text="{Binding ParallelText}"
+                       Text="{Binding ParallelText, Mode=TwoWay}"
                        Keyboard="Numeric" />
                 <Entry Grid.Row="4"
                        Grid.Column="1"
                        Placeholder="Spec Draft N-Max"
-                       Text="{Binding SpecDraftNMaxText}"
+                        Text="{Binding SpecDraftNMaxText, Mode=TwoWay}"
                        Keyboard="Numeric" />
                 <Entry Grid.Row="5"
                        Placeholder="Cache-Typ K"
-                       Text="{Binding CacheTypeK}" />
+                       Text="{Binding CacheTypeK, Mode=TwoWay}" />
                 <Entry Grid.Row="5"
                        Grid.Column="1"
                        Placeholder="Cache-Typ V"
-                       Text="{Binding CacheTypeV}" />
+                        Text="{Binding CacheTypeV, Mode=TwoWay}" />
                 <Entry Grid.Row="6"
                        Grid.ColumnSpan="2"
                        Placeholder="Spec-Type, z. B. draft-mtp"
-                       Text="{Binding SpecType}" />
+                        Text="{Binding SpecType, Mode=TwoWay}" />
+                <Entry Grid.Row="7"
+                       Grid.ColumnSpan="2"
+                       Placeholder="Zusätzliche llama-server-Argumente, z. B. --verbose"
+                        Text="{Binding AdditionalArgs, Mode=TwoWay}" />
+                <Grid Grid.Row="8"
+                      Grid.ColumnSpan="2"
+                      ColumnDefinitions="*,Auto"
+                      ColumnSpacing="12">
+                    <Label Text="WebUI aktiv"
+                           VerticalOptions="Center" />
+                    <Switch Grid.Column="1"
+                            IsToggled="{Binding EnableWebUi, Mode=TwoWay}"
+                            HorizontalOptions="End" />
+                </Grid>
             </Grid>
 
             <Grid ColumnDefinitions="*,*"
@@ -122,6 +136,10 @@
                         Text="Server stoppen"
                         Command="{Binding StopServerCommand}" />
             </Grid>
+            <Button Text="Server-Log als TXT speichern"
+                    Command="{Binding SaveLogCommand}"
+                    IsEnabled="{Binding CanSaveLog}"
+                    HorizontalOptions="Fill" />
             <Label Text="{Binding Status}"
                    LineBreakMode="WordWrap" />
             <Grid ColumnDefinitions="*,Auto"
@@ -132,7 +150,20 @@
                         Text="Health prüfen"
                         Command="{Binding RefreshHealthCommand}" />
             </Grid>
-            <Label Text="{Binding ServerAddress}"
+            <Grid ColumnDefinitions="*,Auto"
+                  ColumnSpacing="8">
+                <Label Text="{Binding ServerAddress}"
+                       FontSize="12"
+                       LineBreakMode="MiddleTruncation"
+                       VerticalOptions="Center" />
+                <Button Grid.Column="1"
+                        Text="WebUI öffnen"
+                        Command="{Binding OpenWebUiCommand}"
+                        IsEnabled="{Binding CanOpenWebUi}" />
+            </Grid>
+            <Label Text="{Binding MemoryUsage}"
+                   FontSize="12" />
+            <Label Text="{Binding ModelMemorySummary}"
                    FontSize="12" />
 
             <Label Text="Server-Konsole"
@@ -141,18 +172,20 @@
                     Stroke="{StaticResource Gray400}"
                     StrokeThickness="1"
                     StrokeShape="RoundRectangle 6">
-                <CollectionView ItemsSource="{Binding LogLines}"
-                                HeightRequest="280"
-                                SelectionMode="None">
-                    <CollectionView.ItemTemplate>
-                        <DataTemplate>
-                            <Label Text="{Binding}"
-                                   FontFamily="monospace"
-                                   FontSize="12"
-                                   LineBreakMode="NoWrap" />
-                        </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                </CollectionView>
+                 <ScrollView x:Name="ServerLogScrollView"
+                             HeightRequest="280"
+                            Orientation="Vertical"
+                            HorizontalScrollBarVisibility="Never"
+                             VerticalScrollBarVisibility="Always"
+                             Scrolled="OnServerLogScrolled">
+                    <Label x:Name="ServerLogLabel"
+                           Text="{Binding ConsoleText}"
+                           FontFamily="monospace"
+                           FontSize="12"
+                           LineBreakMode="CharacterWrap"
+                           HorizontalOptions="Fill"
+                           VerticalOptions="Start" />
+                </ScrollView>
             </Border>
         </VerticalStackLayout>
     </ScrollView>

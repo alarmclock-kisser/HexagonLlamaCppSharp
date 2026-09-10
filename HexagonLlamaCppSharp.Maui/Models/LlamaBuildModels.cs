@@ -11,4 +11,5 @@ public sealed record InstallationManifest(
     string LlamaCommitSha,
     string ServerPath,
     DateTimeOffset InstalledAtUtc,
-    IReadOnlyList<ExtractedNativeAsset> NativeLibraries);
+    IReadOnlyList<ExtractedNativeAsset> NativeLibraries,
+    string BuildConfiguration = "");

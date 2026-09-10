@@ -39,15 +39,18 @@
                 Stroke="{StaticResource Gray400}"
                 StrokeThickness="1"
                 StrokeShape="RoundRectangle 6">
-            <ScrollView Orientation="Both"
-                        HorizontalScrollBarVisibility="Always"
-                        VerticalScrollBarVisibility="Always">
-                <Label Text="{Binding TerminalText}"
+            <ScrollView x:Name="TerminalScrollView"
+                        Orientation="Vertical"
+                        HorizontalScrollBarVisibility="Never"
+                        VerticalScrollBarVisibility="Always"
+                        Scrolled="OnTerminalScrolled">
+                <Label x:Name="TerminalLogLabel"
+                       Text="{Binding TerminalText}"
                        FontFamily="monospace"
                        FontSize="12"
-                       HorizontalOptions="Start"
+                       HorizontalOptions="Fill"
                        VerticalOptions="Start"
-                       LineBreakMode="NoWrap" />
+                       LineBreakMode="CharacterWrap" />
             </ScrollView>
         </Border>
 

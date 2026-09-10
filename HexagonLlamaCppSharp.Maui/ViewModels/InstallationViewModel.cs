@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Runtime.CompilerServices;
@@ -32,6 +33,7 @@ public sealed class InstallationViewModel : INotifyPropertyChanged
     private bool _showTermuxInstallOptions;
     private bool _archiveBackupOffered;
     private bool _isSavingLog;
+    private long _logStartTimestamp;
 
     public InstallationViewModel(
         IExecutionProbe executionProbe,
@@ -167,6 +169,7 @@ public sealed class InstallationViewModel : INotifyPropertyChanged
         ShowTermuxInstallOptions = false;
         _archiveBackupOffered = false;
         _extractedNativeAssets = [];
+        _logStartTimestamp = Stopwatch.GetTimestamp();
         TerminalLines.Clear();
         TerminalText = string.Empty;
         AppendLog(new ProcessLogLine("=== Hexagon-Laufzeit: Preflight ===", false));
@@ -561,7 +564,17 @@ public sealed class InstallationViewModel : INotifyPropertyChanged
                 TerminalLines.RemoveAt(0);
             }
 
-            TerminalLines.Add(line.IsError ? $"[ERR] {line.Text}" : line.Text);
+            var elapsed = TerminalLines.Count == 0 || _logStartTimestamp == 0
+                ? TimeSpan.Zero
+                : Stopwatch.GetElapsedTime(_logStartTimestamp);
+            var prefix = line.Severity switch
+            {
+                ProcessLogSeverity.Warning => "[WARN] ",
+                ProcessLogSeverity.Error => "[ERR] ",
+                ProcessLogSeverity.StandardError => "[STDERR] ",
+                _ => string.Empty
+            };
+            TerminalLines.Add($"[{FormatElapsed(elapsed)}] {prefix}{line.Text}");
             TerminalText = string.Join(Environment.NewLine, TerminalLines);
             OnPropertyChanged(nameof(CanSaveLog));
             ((Command)SaveLogCommand).ChangeCanExecute();
@@ -592,5 +605,10 @@ public sealed class InstallationViewModel : INotifyPropertyChanged
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    private static string FormatElapsed(TimeSpan elapsed)
+    {
+        return $"{(int)elapsed.TotalMinutes:00}:{elapsed.Seconds:00}.{elapsed.Milliseconds:000}";
     }
 }

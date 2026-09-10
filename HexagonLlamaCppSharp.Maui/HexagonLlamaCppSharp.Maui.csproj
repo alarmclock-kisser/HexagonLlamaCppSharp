@@ -42,7 +42,7 @@
 		<TargetSdkVersion>36</TargetSdkVersion>
 		<RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
 		<AndroidUseSharedRuntime>false</AndroidUseSharedRuntime>
-		<AndroidIgnoreAllJniPreload>true</AndroidIgnoreAllJniPreload>
+		<AndroidIgnoreAllJniPreload>false</AndroidIgnoreAllJniPreload>
 		<AndroidStripNativeLibraries>false</AndroidStripNativeLibraries>
 		<AndroidStoreUncompressedFileExtensions>.so;$(AndroidStoreUncompressedFileExtensions)</AndroidStoreUncompressedFileExtensions>
 	</PropertyGroup>

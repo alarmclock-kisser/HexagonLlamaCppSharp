@@ -13,10 +13,12 @@ public sealed record LlamaServerOptions(
     int TopK = 40,
     float RepeatPenalty = 1.1f,
     int Parallel = 1,
-    string? CacheTypeK = "q4_0",
-    string? CacheTypeV = "q4_0",
+    string? CacheTypeK = "q8_0",
+    string? CacheTypeV = "q8_0",
     string? SpecType = null,
-    int SpecDraftNMax = 0);
+    int SpecDraftNMax = 0,
+    string? AdditionalArgs = null,
+    bool EnableWebUi = true);
 
 public sealed record LlamaServerStartResult(
     bool Succeeded,
@@ -27,4 +29,5 @@ public sealed record LlamaServerStartResult(
 public sealed record LlamaServerHealth(
     bool IsHealthy,
     int? StatusCode,
-    string Message);
+    string Message,
+    long? MemoryBytes = null);

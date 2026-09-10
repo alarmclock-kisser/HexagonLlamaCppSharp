@@ -10,11 +10,13 @@ public sealed class AndroidLogExportService : ILogExportService
 
     public async Task<string> SaveAsync(
         IReadOnlyList<string> lines,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string fileNamePrefix = "hexagon-installation")
     {
         ArgumentNullException.ThrowIfNull(lines);
+        ValidateFileNamePrefix(fileNamePrefix);
 
-        var fileName = $"hexagon-installation-{DateTime.Now:yyyyMMdd-HHmmss-fff}.txt";
+        var fileName = $"{fileNamePrefix}-{DateTime.Now:yyyyMMdd-HHmmss-fff}.txt";
         var content = string.Join(Environment.NewLine, lines) + Environment.NewLine;
         cancellationToken.ThrowIfCancellationRequested();
         if (global::Android.OS.Environment.IsExternalStorageManager)
@@ -92,5 +94,14 @@ public sealed class AndroidLogExportService : ILogExportService
         var bytes = Encoding.UTF8.GetBytes(content);
         await stream.WriteAsync(bytes.AsMemory(), cancellationToken);
         await stream.FlushAsync(cancellationToken);
+    }
+
+    private static void ValidateFileNamePrefix(string fileNamePrefix)
+    {
+        if (string.IsNullOrWhiteSpace(fileNamePrefix) ||
+            fileNamePrefix.Any(character => !char.IsLetterOrDigit(character) && character is not ('-' or '_')))
+        {
+            throw new ArgumentException("Der Logdatei-Präfix enthält ungültige Zeichen.", nameof(fileNamePrefix));
+        }
     }
 }

@@ -3,12 +3,26 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
 using HexagonLlamaCppSharp.Maui.Models;
+using Microsoft.Maui.Storage;
 
 namespace HexagonLlamaCppSharp.Maui.Services;
 
 public sealed class LlamaBuildInstaller : ILlamaBuildInstaller
 {
+    private static readonly string[] HexagonRuntimeLibraryNames =
+    [
+        "libc++_shared.so",
+        "libggml-hexagon.so",
+        "libggml-htp-v73.so",
+        "libggml-htp-v75.so",
+        "libggml-htp-v79.so",
+        "libggml-htp-v81.so"
+    ];
+
     private const string AndroidShellPath = "/system/bin/sh";
+    private const string BuildConfiguration = "android-hexagon-backend-bridge-ui-v3";
+    private const string HexagonBackendPluginName = "libggml-hexagon-prebuilt.so";
+    private const string HexagonBackendShimAssetName = "hexagon-backend-shim.c";
     private const string AndroidWritableAppExecutionMessage =
         "Android 10+ blockiert execve für ausführbare Dateien im beschreibbaren App-Speicher. " +
         "Die heruntergeladenen CMake/Ninja/Clang-Dateien können dort trotz chmod 755 nicht gestartet werden; " +
@@ -16,6 +30,8 @@ public sealed class LlamaBuildInstaller : ILlamaBuildInstaller
         "Der aktuelle Archivpfad benötigt daher eine kompatible externe Build-Umgebung wie Termux.";
     private const string RepositoryApiUrl = "https://api.github.com/repos/ggerganov/llama.cpp/commits/master";
     private const string RepositoryArchiveUrlFormat = "https://github.com/ggerganov/llama.cpp/archive/{0}.tar.gz";
+    private const string LlamaUiArchiveUrl = "https://huggingface.co/buckets/ggml-org/llama-ui/resolve/latest/dist.tar.gz?download=true";
+    private const string LlamaUiChecksumUrl = "https://huggingface.co/buckets/ggml-org/llama-ui/resolve/latest/dist.tar.gz.sha256?download=true";
 
     private readonly RuntimeLayout _layout;
     private readonly IInstallationManifestStore _manifestStore;
@@ -59,13 +75,17 @@ public sealed class LlamaBuildInstaller : ILlamaBuildInstaller
         try
         {
             _layout.EnsureDirectories();
-            var reusedBuild = await TryReuseInstalledBuildAsync(toolchain, nativeAssets, progress, output, cancellationToken);
+            var runtimeAssets = nativeAssets
+                .Where(IsHexagonRuntimeLibrary)
+                .ToArray();
+            var reusedBuild = await TryReuseInstalledBuildAsync(toolchain, runtimeAssets, progress, output, cancellationToken);
             if (reusedBuild is not null)
             {
                 return reusedBuild;
             }
 
             var commitSha = await DownloadLatestSourceAsync(progress, output, cancellationToken);
+            await DownloadAndStageWebUiAsync(progress, output, cancellationToken);
             var buildDirectory = _layout.BuildDirectory;
             if (Directory.Exists(buildDirectory))
             {
@@ -99,7 +119,7 @@ public sealed class LlamaBuildInstaller : ILlamaBuildInstaller
             var ranlibPath = GetNdkToolAliasPath(toolchainFile, "llvm-ranlib");
             var clangResourceDirectory = GetClangResourceDirectory(toolchainFile);
 
-            progress.Report(new InstallationProgress(82, "llama.cpp Build", "Konfiguriere CMake mit GGML_HEXAGON=OFF ..."));
+            progress.Report(new InstallationProgress(82, "llama.cpp Build", "Konfiguriere CMake mit dynamischem Hexagon-Backend ..."));
             output.Report(new ProcessLogLine($"CMake toolchain file: {toolchainFile}", false));
             output.Report(new ProcessLogLine($"LLVM-Linker-Alias: {linkerPath}", false));
             var configureResult = await _processRunner.RunAsync(
@@ -113,8 +133,13 @@ public sealed class LlamaBuildInstaller : ILlamaBuildInstaller
                          $"-DCMAKE_TOOLCHAIN_FILE={toolchainFile}",
                         "-DANDROID_ABI=arm64-v8a",
                         "-DANDROID_PLATFORM=android-35",
+                        "-DBUILD_SHARED_LIBS=ON",
+                        "-DGGML_BACKEND_DL=ON",
+                        $"-DGGML_BACKEND_DIR={Path.Combine(buildDirectory, "bin")}",
                         "-DGGML_HEXAGON=OFF",
                         "-DLLAMA_BUILD_SERVER=ON",
+                         "-DLLAMA_BUILD_UI=OFF",
+                         "-DLLAMA_USE_PREBUILT_UI=OFF",
                         "-DCMAKE_BUILD_TYPE=Release",
                          $"-DCMAKE_C_COMPILER={clangPath}",
                          $"-DCMAKE_CXX_COMPILER={clangPlusPlusPath}",
@@ -164,9 +189,18 @@ public sealed class LlamaBuildInstaller : ILlamaBuildInstaller
                 return new LlamaBuildResult(false, "Der Build meldete Erfolg, aber build/bin/llama-server wurde nicht gefunden.", CommitSha: commitSha);
             }
 
-            await InstallNativeLibrariesAsync(nativeAssets, buildDirectory, output, cancellationToken);
+            await InstallNativeLibrariesAsync(runtimeAssets, buildDirectory, output, cancellationToken);
+            await BuildHexagonBackendPluginAsync(
+                clangPath,
+                linkerPath,
+                clangResourceDirectory,
+                GetNdkDirectory(toolchainFile),
+                buildDirectory,
+                environment,
+                output,
+                cancellationToken);
             _filePermissionService.MakeExecutable(serverPath);
-            await WriteInstallationManifestAsync(toolchain, commitSha, serverPath, nativeAssets, cancellationToken);
+            await WriteInstallationManifestAsync(toolchain, commitSha, serverPath, runtimeAssets, cancellationToken);
             progress.Report(new InstallationProgress(100, "llama.cpp Build", "llama-server und Hexagon-Bibliotheken sind installiert."));
             return new LlamaBuildResult(true, "llama-server erfolgreich gebaut und installiert.", serverPath, commitSha);
         }
@@ -177,7 +211,7 @@ public sealed class LlamaBuildInstaller : ILlamaBuildInstaller
         catch (HttpRequestException exception)
         {
             output.Report(new ProcessLogLine(exception.Message, true));
-            return new LlamaBuildResult(false, "Der aktuelle llama.cpp-Source konnte nicht geladen werden.");
+            return new LlamaBuildResult(false, "Der llama.cpp-Source oder die WebUI konnte nicht geladen werden.");
         }
         catch (JsonException exception)
         {
@@ -225,6 +259,80 @@ public sealed class LlamaBuildInstaller : ILlamaBuildInstaller
         return commitSha;
     }
 
+    private async Task DownloadAndStageWebUiAsync(
+        IProgress<InstallationProgress> progress,
+        IProgress<ProcessLogLine> output,
+        CancellationToken cancellationToken)
+    {
+        var distDirectory = Path.Combine(_layout.SourceDirectory, "tools", "ui", "dist");
+        if (File.Exists(Path.Combine(distDirectory, "index.html")))
+        {
+            output.Report(new ProcessLogLine("Vorhandene llama.cpp-WebUI-Assets werden verwendet.", ProcessLogSeverity.Information));
+            return;
+        }
+
+        var archivePath = Path.Combine(_layout.RootDirectory, "llama-ui-dist.tar.gz");
+        progress.Report(new InstallationProgress(80, "llama.cpp WebUI", "Lade die eingebettete WebUI ..."));
+        output.Report(new ProcessLogLine("Lade verifizierte llama.cpp-WebUI-Assets ...", ProcessLogSeverity.Information));
+
+        await DownloadFileAsync(
+            LlamaUiArchiveUrl,
+            archivePath,
+            80,
+            1,
+            progress,
+            cancellationToken,
+            "llama.cpp WebUI",
+            "WebUI-Download");
+
+        var checksumText = await _httpClient.GetStringAsync(LlamaUiChecksumUrl, cancellationToken);
+        var expectedChecksum = checksumText
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(expectedChecksum) ||
+            expectedChecksum.Length != SHA256.HashSizeInBytes * 2 ||
+            expectedChecksum.Any(character => !Uri.IsHexDigit(character)))
+        {
+            throw new InvalidDataException("Die llama.cpp-WebUI-Prüfsumme ist ungültig.");
+        }
+
+        await using (var archiveStream = new FileStream(
+            archivePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            128 * 1024,
+            FileOptions.Asynchronous | FileOptions.SequentialScan))
+        {
+            var actualChecksum = Convert.ToHexString(await SHA256.HashDataAsync(archiveStream, cancellationToken));
+            if (!actualChecksum.Equals(expectedChecksum, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException("Die Integritätsprüfung der llama.cpp-WebUI ist fehlgeschlagen.");
+            }
+        }
+
+        if (Directory.Exists(distDirectory))
+        {
+            Directory.Delete(distDirectory, recursive: true);
+        }
+
+        Directory.CreateDirectory(distDirectory);
+        await using (var archiveStream = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+        await using (var gzipStream = new GZipStream(archiveStream, CompressionMode.Decompress))
+        {
+            TarFile.ExtractToDirectory(gzipStream, distDirectory, overwriteFiles: true);
+        }
+
+        if (!File.Exists(Path.Combine(distDirectory, "index.html")))
+        {
+            throw new InvalidDataException("Das llama.cpp-WebUI-Archiv enthält keine index.html.");
+        }
+
+        File.Delete(archivePath);
+        output.Report(new ProcessLogLine("llama.cpp-WebUI-Assets sind verifiziert und werden in llama-server eingebettet.", ProcessLogSeverity.Information));
+        progress.Report(new InstallationProgress(81, "llama.cpp WebUI", "WebUI-Assets sind bereit."));
+    }
+
     private async Task<LlamaBuildResult?> TryReuseInstalledBuildAsync(
         ToolchainBootstrapResult toolchain,
         IReadOnlyList<ExtractedNativeAsset> nativeAssets,
@@ -244,10 +352,13 @@ public sealed class LlamaBuildInstaller : ILlamaBuildInstaller
         }
 
         if (manifest is null ||
+            !string.Equals(manifest.BuildConfiguration, BuildConfiguration, StringComparison.Ordinal) ||
             !string.Equals(manifest.ToolchainVersion, toolchain.Manifest?.Version, StringComparison.Ordinal) ||
             !IsServerPathInBuildDirectory(manifest.ServerPath) ||
+            !File.Exists(GetHexagonBackendPluginPath(_layout.BuildDirectory)) ||
             !File.Exists(manifest.ServerPath) ||
-            !await HasCurrentNativeLibrariesAsync(nativeAssets, cancellationToken))
+            !HasExpectedNativeLibraryManifest(manifest, nativeAssets) ||
+            !await HasCurrentInstalledLibrariesAsync(manifest, cancellationToken))
         {
             return null;
         }
@@ -258,14 +369,38 @@ public sealed class LlamaBuildInstaller : ILlamaBuildInstaller
         return new LlamaBuildResult(true, "llama-server-Installation erfolgreich wiederverwendet.", manifest.ServerPath, manifest.LlamaCommitSha);
     }
 
-    private async Task<bool> HasCurrentNativeLibrariesAsync(
-        IReadOnlyList<ExtractedNativeAsset> nativeAssets,
+    private static bool HasExpectedNativeLibraryManifest(
+        InstallationManifest manifest,
+        IReadOnlyList<ExtractedNativeAsset> nativeAssets)
+    {
+        if (manifest.NativeLibraries is null || manifest.NativeLibraries.Count != nativeAssets.Count)
+        {
+            return false;
+        }
+
+        var expected = nativeAssets.ToDictionary(asset => asset.FileName, StringComparer.Ordinal);
+        if (manifest.NativeLibraries.Any(library => library is null) ||
+            manifest.NativeLibraries.Select(library => library.FileName).Distinct(StringComparer.Ordinal).Count() != expected.Count ||
+            manifest.NativeLibraries.Any(library => !expected.ContainsKey(library.FileName)))
+        {
+            return false;
+        }
+
+        return nativeAssets
+            .Where(IsHexagonRuntimeLibrary)
+            .All(asset => manifest.NativeLibraries.Any(library =>
+                string.Equals(library.FileName, asset.FileName, StringComparison.Ordinal) &&
+                string.Equals(library.Sha256, asset.Sha256, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private async Task<bool> HasCurrentInstalledLibrariesAsync(
+        InstallationManifest manifest,
         CancellationToken cancellationToken)
     {
         var binDirectory = Path.Combine(_layout.BuildDirectory, "bin");
-        foreach (var asset in nativeAssets)
+        foreach (var library in manifest.NativeLibraries)
         {
-            var path = Path.Combine(binDirectory, asset.FileName);
+            var path = Path.Combine(binDirectory, library.FileName);
             if (!File.Exists(path))
             {
                 return false;
@@ -279,13 +414,84 @@ public sealed class LlamaBuildInstaller : ILlamaBuildInstaller
                 128 * 1024,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
             var hash = Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken));
-            if (!hash.Equals(asset.Sha256, StringComparison.OrdinalIgnoreCase))
+            if (!hash.Equals(library.Sha256, StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }
         }
 
         return true;
+    }
+
+    private async Task BuildHexagonBackendPluginAsync(
+        string clangPath,
+        string linkerPath,
+        string clangResourceDirectory,
+        string ndkDirectory,
+        string buildDirectory,
+        IReadOnlyDictionary<string, string> environment,
+        IProgress<ProcessLogLine> output,
+        CancellationToken cancellationToken)
+    {
+        var binDirectory = Path.Combine(buildDirectory, "bin");
+        var shimSourcePath = Path.Combine(buildDirectory, HexagonBackendShimAssetName);
+        var pluginPath = GetHexagonBackendPluginPath(buildDirectory);
+
+        await using (var source = await FileSystem.OpenAppPackageFileAsync(HexagonBackendShimAssetName))
+        await using (var destination = new FileStream(
+            shimSourcePath,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            4096,
+            FileOptions.Asynchronous | FileOptions.SequentialScan))
+        {
+            await source.CopyToAsync(destination, cancellationToken);
+            await destination.FlushAsync(cancellationToken);
+        }
+
+        output.Report(new ProcessLogLine("Erzeuge Hexagon-Backend-Bridge für den dynamischen llama.cpp-Lader ...", false));
+        var sysroot = Path.Combine(ndkDirectory, "toolchains", "llvm", "prebuilt", "linux-x86_64", "sysroot");
+        var result = await _processRunner.RunAsync(
+            CreateProcessSpec(
+                clangPath,
+                [
+                    "-target", "aarch64-linux-android35",
+                    "-shared",
+                    "-fPIC",
+                    "-std=c11",
+                    $"-resource-dir={clangResourceDirectory}",
+                    $"--sysroot={sysroot}",
+                    $"-fuse-ld={linkerPath}",
+                    shimSourcePath,
+                    "-Wl,--no-as-needed",
+                    Path.Combine(binDirectory, "libc++_shared.so"),
+                    Path.Combine(binDirectory, "libggml-hexagon.so"),
+                    "-Wl,--as-needed",
+                    $"-Wl,-soname,{HexagonBackendPluginName}",
+                    "-o", pluginPath
+                ],
+                buildDirectory,
+                environment),
+            output,
+            cancellationToken);
+        if (result.ExitCode != 0 || !File.Exists(pluginPath))
+        {
+            throw new IOException($"Die Hexagon-Backend-Bridge konnte nicht erstellt werden (Exit-Code {result.ExitCode}).");
+        }
+
+        _filePermissionService.MakeExecutable(pluginPath);
+        output.Report(new ProcessLogLine($"Hexagon-Backend-Bridge installiert: {pluginPath}", false));
+    }
+
+    private static string GetHexagonBackendPluginPath(string buildDirectory)
+    {
+        return Path.Combine(buildDirectory, "bin", HexagonBackendPluginName);
+    }
+
+    private static bool IsHexagonRuntimeLibrary(ExtractedNativeAsset asset)
+    {
+        return HexagonRuntimeLibraryNames.Contains(asset.FileName, StringComparer.Ordinal);
     }
 
     private bool IsServerPathInBuildDirectory(string path)
@@ -306,7 +512,9 @@ public sealed class LlamaBuildInstaller : ILlamaBuildInstaller
         int progressStart,
         int progressRange,
         IProgress<InstallationProgress> progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string phase = "llama.cpp Source",
+        string description = "Source-Download")
     {
         using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
@@ -324,7 +532,7 @@ public sealed class LlamaBuildInstaller : ILlamaBuildInstaller
             var percent = totalLength is > 0
                 ? progressStart + (int)Math.Min(progressRange, downloaded * progressRange / totalLength.Value)
                 : progressStart;
-            progress.Report(new InstallationProgress(percent, "llama.cpp Source", $"Source-Download: {FormatBytes(downloaded)}"));
+            progress.Report(new InstallationProgress(percent, phase, $"{description}: {FormatBytes(downloaded)}"));
         }
 
         await output.FlushAsync(cancellationToken);
@@ -406,12 +614,14 @@ public sealed class LlamaBuildInstaller : ILlamaBuildInstaller
         IReadOnlyList<ExtractedNativeAsset> nativeAssets,
         CancellationToken cancellationToken)
     {
+        var installedLibraries = await ReadInstalledLibrariesAsync(nativeAssets, serverPath, cancellationToken);
         var manifest = new InstallationManifest(
             toolchain.Manifest?.Version ?? "unknown",
             commitSha,
             serverPath,
             DateTimeOffset.UtcNow,
-            nativeAssets);
+            installedLibraries,
+            BuildConfiguration);
         var temporaryPath = _layout.ManifestPath + ".partial";
         await using (var stream = new FileStream(temporaryPath, FileMode.Create, FileAccess.Write, FileShare.None, 16 * 1024, FileOptions.Asynchronous))
         {
@@ -420,6 +630,36 @@ public sealed class LlamaBuildInstaller : ILlamaBuildInstaller
         }
 
         File.Move(temporaryPath, _layout.ManifestPath, overwrite: true);
+    }
+
+    private async Task<IReadOnlyList<ExtractedNativeAsset>> ReadInstalledLibrariesAsync(
+        IReadOnlyList<ExtractedNativeAsset> nativeAssets,
+        string serverPath,
+        CancellationToken cancellationToken)
+    {
+        var binDirectory = Path.GetDirectoryName(serverPath)
+            ?? throw new IOException("Das llama-server-Verzeichnis konnte nicht ermittelt werden.");
+        var installedLibraries = new List<ExtractedNativeAsset>(nativeAssets.Count);
+        foreach (var asset in nativeAssets)
+        {
+            var path = Path.Combine(binDirectory, asset.FileName);
+            if (!File.Exists(path))
+            {
+                throw new IOException($"Die installierte Bibliothek '{asset.FileName}' wurde nicht gefunden.");
+            }
+
+            await using var stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                128 * 1024,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            var hash = Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken));
+            installedLibraries.Add(new ExtractedNativeAsset(asset.FileName, path, stream.Length, hash));
+        }
+
+        return installedLibraries;
     }
 
     private string GetToolchainFilePath(ToolchainBootstrapResult toolchain)

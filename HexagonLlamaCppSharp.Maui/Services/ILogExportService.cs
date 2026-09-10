@@ -4,5 +4,6 @@ public interface ILogExportService
 {
     Task<string> SaveAsync(
         IReadOnlyList<string> lines,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        string fileNamePrefix = "hexagon-installation");
 }
